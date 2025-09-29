@@ -30,9 +30,10 @@ serve(async (req) => {
 
     console.log('Buscando dados das planilhas Google Sheets...');
 
-    // Buscar dados da planilha de Produção
+    // Buscar dados da planilha de Produção (URL encode o nome da aba)
+    const producaoSheetName = encodeURIComponent('Produção');
     const producaoResponse = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${producaoSheetId}/values/Produção!A:O?key=${apiKey}`
+      `https://sheets.googleapis.com/v4/spreadsheets/${producaoSheetId}/values/${producaoSheetName}!A:O?key=${apiKey}`
     );
     
     if (!producaoResponse.ok) {
