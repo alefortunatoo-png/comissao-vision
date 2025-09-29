@@ -1,5 +1,6 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { SignJWT, importPKCS8 } from "https://deno.land/x/jose@v4.14.4/index.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -14,82 +15,56 @@ interface SheetData {
 
 // Function to create JWT for Google Service Account
 async function createJWT() {
-  const privateKey = Deno.env.get('GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY');
+  const privateKeyPem = Deno.env.get('GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY');
   const clientEmail = Deno.env.get('GOOGLE_SERVICE_ACCOUNT_CLIENT_EMAIL');
-  
-  if (!privateKey || !clientEmail) {
+
+  if (!privateKeyPem || !clientEmail) {
     throw new Error('Google Service Account credentials not configured');
   }
 
-  const now = Math.floor(Date.now() / 1000);
-  const iat = now;
-  const exp = now + 3600; // 1 hour
+  // Normalize PEM from secrets ("\n" -> real newlines)
+  const pem = privateKeyPem.replace(/\\n/g, '\n');
+  const alg = 'RS256';
+  const key = await importPKCS8(pem, alg);
 
-  const header = {
-    alg: "RS256",
-    typ: "JWT"
-  };
+  const jwt = await new SignJWT({
+    scope: 'https://www.googleapis.com/auth/spreadsheets.readonly',
+  })
+    .setProtectedHeader({ alg, typ: 'JWT' })
+    .setIssuedAt()
+    .setExpirationTime('1h')
+    .setIssuer(clientEmail)
+    .setAudience('https://oauth2.googleapis.com/token')
+    .sign(key);
 
-  const payload = {
-    iss: clientEmail,
-    scope: "https://www.googleapis.com/auth/spreadsheets.readonly",
-    aud: "https://oauth2.googleapis.com/token",
-    iat: iat,
-    exp: exp
-  };
-
-  // Base64url encode header and payload
-  const encodedHeader = btoa(JSON.stringify(header)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-  const encodedPayload = btoa(JSON.stringify(payload)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-
-  // Create signature
-  const signingInput = `${encodedHeader}.${encodedPayload}`;
-  
-  // Import the private key
-  const keyData = privateKey.replace(/\\n/g, '\n').replace(/-----BEGIN PRIVATE KEY-----/, '').replace(/-----END PRIVATE KEY-----/, '').replace(/\s/g, '');
-  const binaryKey = Uint8Array.from(atob(keyData), c => c.charCodeAt(0));
-  
-  const cryptoKey = await crypto.subtle.importKey(
-    'pkcs8',
-    binaryKey,
-    {
-      name: 'RSASSA-PKCS1-v1_5',
-      hash: 'SHA-256',
-    },
-    false,
-    ['sign']
-  );
-
-  const signature = await crypto.subtle.sign(
-    'RSASSA-PKCS1-v1_5',
-    cryptoKey,
-    new TextEncoder().encode(signingInput)
-  );
-
-  const encodedSignature = btoa(String.fromCharCode(...new Uint8Array(signature)))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-
-  return `${signingInput}.${encodedSignature}`;
+  return jwt;
 }
 
 // Function to get access token
 async function getAccessToken() {
-  const jwt = await createJWT();
-  
+  const assertion = await createJWT();
+
+  const body = new URLSearchParams({
+    grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+    assertion,
+  });
+
   const response = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
     },
-    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
+    body: body.toString(),
   });
 
+  const text = await response.text();
   if (!response.ok) {
+    console.error('Failed to get access token:', response.status, text);
     throw new Error(`Failed to get access token: ${response.status}`);
   }
 
-  const data = await response.json();
-  return data.access_token;
+  const data = JSON.parse(text);
+  return data.access_token as string;
 }
 
 serve(async (req) => {
@@ -111,8 +86,9 @@ serve(async (req) => {
     console.log('Buscando dados das planilhas Google Sheets...');
 
     // Buscar dados da planilha de Produção (usar diferentes formatos para o range)
+    const producaoRange = encodeURIComponent('Produção!A:O');
     const producaoResponse = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${producaoSheetId}/values/Produção!A:O`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${producaoSheetId}/values/${producaoRange}`,
       {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
@@ -130,8 +106,9 @@ serve(async (req) => {
     const producaoData: SheetData = await producaoResponse.json();
 
     // Buscar dados da planilha de Pagamentos
+    const pagamentosRange = encodeURIComponent('Pagamentos!A:J');
     const pagamentoResponse = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${pagamentoSheetId}/values/Pagamentos!A:J`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${pagamentoSheetId}/values/${pagamentosRange}`,
       {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
