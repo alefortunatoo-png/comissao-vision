@@ -116,10 +116,17 @@ export function CommissionDashboard() {
     }
   };
 
-  // Load data on component mount
+  // Load data on component mount and set up auto-refresh
   useEffect(() => {
     if (user) {
       fetchGoogleSheetsData();
+      
+      // Auto-refresh every 30 seconds
+      const interval = setInterval(() => {
+        fetchGoogleSheetsData();
+      }, 30000);
+      
+      return () => clearInterval(interval);
     }
   }, [user]);
 
