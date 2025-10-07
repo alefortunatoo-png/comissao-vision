@@ -77,37 +77,18 @@ serve(async (req) => {
   try {
     console.log('Buscando dados das planilhas Google Sheets...');
     
-    // Get user from authorization header
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      throw new Error('Authorization header is required');
-    }
-
-    // Create Supabase client
+    // Create Supabase client (no auth required)
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        global: {
-          headers: { Authorization: authHeader },
-        },
-      }
+      Deno.env.get('SUPABASE_ANON_KEY') ?? ''
     );
 
-    // Get current user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      throw new Error('User not authenticated');
-    }
-
-    console.log('User authenticated:', user.id);
-
-    // Get sheets configuration from database
+    // Get sheets configuration from database (get the first/only row)
     const { data: config, error: configError } = await supabase
       .from('sheets_config')
       .select('producao_sheet_id, pagamento_sheet_id')
-      .eq('user_id', user.id)
-      .single();
+      .limit(1)
+      .maybeSingle();
 
     if (configError || !config) {
       console.error('Erro ao buscar configuração:', configError);

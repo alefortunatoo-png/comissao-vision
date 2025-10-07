@@ -6,8 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { TrendingUp, TrendingDown, Users, DollarSign, CheckCircle, Clock, AlertCircle, Filter, Search, LogOut, RefreshCw, Settings } from "lucide-react";
-import { useAuth } from "@/hooks/useAuth";
+import { TrendingUp, TrendingDown, Users, DollarSign, CheckCircle, Clock, AlertCircle, Filter, Search, RefreshCw, Settings } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -69,7 +68,6 @@ const mockPaymentData: PaymentData[] = [
 ];
 
 export function CommissionDashboard() {
-  const { user, loading, signOut } = useAuth();
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -80,13 +78,6 @@ export function CommissionDashboard() {
     lastUpdated: string;
   } | null>(null);
   const [isLoadingData, setIsLoadingData] = useState(false);
-
-  // Redirect to auth if not authenticated
-  useEffect(() => {
-    if (!loading && !user) {
-      navigate("/auth");
-    }
-  }, [user, loading, navigate]);
 
   // Fetch real-time data from Google Sheets
   const fetchGoogleSheetsData = async () => {
@@ -118,17 +109,15 @@ export function CommissionDashboard() {
 
   // Load data on component mount and set up auto-refresh
   useEffect(() => {
-    if (user) {
+    fetchGoogleSheetsData();
+    
+    // Auto-refresh every 30 seconds
+    const interval = setInterval(() => {
       fetchGoogleSheetsData();
-      
-      // Auto-refresh every 30 seconds
-      const interval = setInterval(() => {
-        fetchGoogleSheetsData();
-      }, 30000);
-      
-      return () => clearInterval(interval);
-    }
-  }, [user]);
+    }, 30000);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   // Use real data if available, otherwise fallback to mock data
   const currentPolicyData = realTimeData?.policies || mockPolicyData;
@@ -216,7 +205,6 @@ export function CommissionDashboard() {
     return { total, recebidas, parcelados, pendentes, totalPrevista, totalRecebida, percentualGeral };
   }, [commissionSummary]);
 
-  // Helper function to get status badge
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "recebida":
@@ -229,17 +217,6 @@ export function CommissionDashboard() {
         return null;
     }
   };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2" />
-          <p>Carregando...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background/95 to-background/90 p-6">
@@ -272,10 +249,6 @@ export function CommissionDashboard() {
             <Button onClick={() => navigate('/settings')} variant="outline" size="sm">
               <Settings className="h-4 w-4 mr-2" />
               Configurar Planilhas
-            </Button>
-            <Button onClick={signOut} variant="outline" size="sm">
-              <LogOut className="h-4 w-4 mr-2" />
-              Sair
             </Button>
           </div>
         </div>

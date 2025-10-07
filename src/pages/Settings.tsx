@@ -5,12 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, Save, ExternalLink } from "lucide-react";
-import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 export default function Settings() {
-  const { user, loading } = useAuth();
   const navigate = useNavigate();
   const [producaoSheetId, setProducaoSheetId] = useState("");
   const [pagamentoSheetId, setPagamentoSheetId] = useState("");
@@ -18,24 +16,16 @@ export default function Settings() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!loading && !user) {
-      navigate("/auth");
-    }
-  }, [user, loading, navigate]);
-
-  useEffect(() => {
-    if (user) {
-      loadConfig();
-    }
-  }, [user]);
+    loadConfig();
+  }, []);
 
   const loadConfig = async () => {
     try {
       const { data, error } = await supabase
         .from('sheets_config')
         .select('*')
-        .eq('user_id', user?.id)
-        .single();
+        .limit(1)
+        .maybeSingle();
 
       if (error && error.code !== 'PGRST116') {
         throw error;
@@ -63,8 +53,8 @@ export default function Settings() {
       const { data: existing } = await supabase
         .from('sheets_config')
         .select('id')
-        .eq('user_id', user?.id)
-        .single();
+        .limit(1)
+        .maybeSingle();
 
       if (existing) {
         const { error } = await supabase
@@ -73,14 +63,13 @@ export default function Settings() {
             producao_sheet_id: producaoSheetId,
             pagamento_sheet_id: pagamentoSheetId,
           })
-          .eq('user_id', user?.id);
+          .eq('id', existing.id);
 
         if (error) throw error;
       } else {
         const { error } = await supabase
           .from('sheets_config')
           .insert({
-            user_id: user?.id,
             producao_sheet_id: producaoSheetId,
             pagamento_sheet_id: pagamentoSheetId,
           });
@@ -98,7 +87,7 @@ export default function Settings() {
     }
   };
 
-  if (loading || isLoading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <p>Carregando...</p>
