@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { TrendingUp, TrendingDown, Users, DollarSign, CheckCircle, Clock, AlertCircle, Filter, Search, LogOut, RefreshCw } from "lucide-react";
+import { TrendingUp, TrendingDown, Users, DollarSign, CheckCircle, Clock, AlertCircle, Filter, Search, LogOut, RefreshCw, Settings } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -268,6 +268,10 @@ export function CommissionDashboard() {
             >
               <RefreshCw className={`h-4 w-4 mr-2 ${isLoadingData ? 'animate-spin' : ''}`} />
               Atualizar
+            </Button>
+            <Button onClick={() => navigate('/settings')} variant="outline" size="sm">
+              <Settings className="h-4 w-4 mr-2" />
+              Configurar Planilhas
             </Button>
             <Button onClick={signOut} variant="outline" size="sm">
               <LogOut className="h-4 w-4 mr-2" />

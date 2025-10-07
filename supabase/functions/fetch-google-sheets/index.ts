@@ -1,6 +1,7 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { SignJWT, importPKCS8 } from "https://deno.land/x/jose@v4.14.4/index.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.58.0';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -76,14 +77,61 @@ serve(async (req) => {
   try {
     console.log('Buscando dados das planilhas Google Sheets...');
     
+    // Get user from authorization header
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      throw new Error('Authorization header is required');
+    }
+
+    // Create Supabase client
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      {
+        global: {
+          headers: { Authorization: authHeader },
+        },
+      }
+    );
+
+    // Get current user
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      throw new Error('User not authenticated');
+    }
+
+    console.log('User authenticated:', user.id);
+
+    // Get sheets configuration from database
+    const { data: config, error: configError } = await supabase
+      .from('sheets_config')
+      .select('producao_sheet_id, pagamento_sheet_id')
+      .eq('user_id', user.id)
+      .single();
+
+    if (configError || !config) {
+      console.error('Erro ao buscar configuração:', configError);
+      return new Response(
+        JSON.stringify({ 
+          error: 'Configuração das planilhas não encontrada. Por favor, configure os IDs das planilhas nas configurações.',
+          policies: [],
+          payments: [],
+          lastUpdated: new Date().toISOString()
+        }), 
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    const producaoSheetId = config.producao_sheet_id;
+    const pagamentoSheetId = config.pagamento_sheet_id;
+
+    console.log('Usando planilhas:', { producaoSheetId, pagamentoSheetId });
+    
     // Get access token using service account
     const accessToken = await getAccessToken();
-
-    // IDs das planilhas do usuário
-    const producaoSheetId = '1h_WtlfjOxZ_fEcyHtQShxtUyW-b5M4QNXJ3t3LMeMnI';
-    const pagamentoSheetId = '14f1fLUmEBy7XYFv1aMmE_zFpgsNfGkXfJvJuyvv8_kA';
-
-    console.log('Buscando dados das planilhas Google Sheets...');
 
     // Buscar dados da planilha de Produção (usar diferentes formatos para o range)
     const producaoRange = encodeURIComponent('Produção!A:O');
